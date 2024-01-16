@@ -1,0 +1,318 @@
+﻿@model IEnumerable<SamsWarehouseWebApp.Models.Data.Item>
+
+@{
+    ViewData["Title"] = "Index";
+
+    bool isLoggedIn = User?.Identity?.IsAuthenticated ?? false;
+
+    bool isAdmin = User?.IsInRole("Admin") ?? false;
+    
+}
+
+<h1>Products</h1>
+
+    @if (isAdmin)
+    {
+        <input type="button" value="Create" class="btn btn-outline-dark" onclick="showCreateModal()" />
+    }
+
+
+<div id="ItemTableContainer">
+    <partial name="_ItemTable.cshtml" />
+</div>
+
+
+<div class="modal" id="ItemModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="ModalTitle">Modal title</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="ModalBody">
+                <p>Modal body text goes here.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal" id="showCreateModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Create Item</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="ModalBody">
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.smaller-input {
+        width: 70px;
+    }
+</style>
+
+<div class="modal fade" id="addItemToListModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+
+                <h5 class="modal-title" style="color:black">Add Product To List</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="modalBody">
+
+                <form id="addItemToListForm">
+
+                    <div class="row justify-content-evenly">
+                        <div class="col-6" id="ddlContainer">
+                            <select class="form-select" disabled>
+                                <option>Loading.....</option>
+                            </select>
+                        </div>
+                        <label style="color:black"> Quantity: </label>
+                            <input type="number" name="Quantity" class="smaller-input" value="1" min="1" max="99" />
+                        <div class="col-3">
+                            <input type="submit" value="Add Item" class="btn btn-success mt-3" />
+                        </div>
+                    </div>
+                </form>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal" id="addDuplicateItem" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content"> 
+            <div class="modal-header">  
+                <h5 class="modal-title" >Add to Shopping List</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="ModalBody"> 
+                <label> Item already in selected Shopping List.</label>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Adds an event listener to add item to list modal form to allow add to list function
+
+    window.addEventListener('load', (e) => {
+        document.getElementById('addItemToListForm').addEventListener('submit', async (e) => {
+            handleAddItemToList(e);
+        })
+    })
+
+    // Prepares and displays modal to add item to list
+    async function addToShoppingList(itemId) {
+        sessionStorage.setItem('selectedItemId', itemId);
+        console.log(itemId);
+
+        $("#addItemToListModal").modal("show");
+
+        let result = await fetch('/List/ShoppingListDDL');
+        let htmlResult = await result.text();
+        document.getElementById("ddlContainer").innerHTML = htmlResult;
+    }
+    // Adds items to list 
+    async function handleAddItemToList(e) {
+        e.preventDefault();
+
+        // Retrieves ItemId from session
+        let itemId = sessionStorage.getItem('selectedItemId');
+        // Retrieves ListId from shopping list
+        let listID = e.target["shoppingList"].selectedOptions[0].value
+
+        if (listID == 0) {
+            return;
+        }
+
+        let listItem =
+        {
+            ListId: listID,
+            ItemId: itemId,
+            Quantity: e.target["Quantity"].value
+        }
+
+        console.log(listItem);
+
+        // Executes fetch request to add item to list from controller
+        let result = await fetch("/List/AddItemToList", {
+            method: "POST",
+            headers: {
+                "content-type": "application/json"
+            },
+            body: JSON.stringify(listItem)
+        });
+        // Hides the add item to list modal if successful 
+        if (result.ok) {
+            $("#addItemToListModal").modal("hide");
+        }
+        // Hides modal, sends modal message to user displaying that they have already added item to list
+        else if (!result.ok) {
+            $("#addItemToListModal").modal("hide");
+            $("#addDuplicateItem").modal("show");
+        }
+    }
+
+
+    async function updateTable() {
+        // Send a GET request to the /Joke/JokeTablePartial endpoint
+        //let response = await advFetch('/Item/ItemTablePartial');
+        let response = await fetch('/Item/ItemTablePartial');
+
+
+        // Parse the results as text
+        let htmlResponse = await response.text();
+
+        // overwrite the JokeTableContainer innerHTML with the new data
+        document.getElementById('ItemTableContainer').innerHTML = htmlResponse;
+    }
+
+    async function showEditModal(id) {
+        //showSpinner();
+        let response = await fetch ('/Item/Edit?id=' + id);
+        let htmlResponse = await response.text();
+
+        document.getElementById('ModalBody').innerHTML = htmlResponse;
+        document.getElementById('ModalTitle').innerHTML = "Edit Item";
+
+        let formReference = document.querySelector('form[action="/Item/Edit"]');
+
+        console.log(formReference)
+
+        formReference.addEventListener('submit', (e) => { handleEditSubmit(e, id) });
+        //hideSpinner();
+        $('#ItemModal').modal('show');
+    }
+
+    async function showCreateModal() {
+
+        let response = await fetch('/Item/Create');
+        let htmlResponse = await response.text();
+        document.getElementById('ModalBody').innerHTML = htmlResponse;
+        document.getElementById('ModalTitle').innerHTML = "Create Item";
+        // get a reference to the form
+
+        let formReference = document.querySelector('form[action="/Item/Create"]');
+
+        // Parse the validation rules on the individual In
+        //
+        //  fields
+        $.validator.unobtrusive.parse(formReference);
+
+        console.log(formReference);
+
+        formReference.addEventListener("submit", (e) => { handleCreateSubmit(e) });
+
+        $('#ItemModal').modal('show');
+    }
+
+    async function handleEditSubmit(e, id) {
+        e.preventDefault();
+
+        let form = e.target;
+
+        let itemData = {
+            itemName: e.target["ItemName"].value,
+            unit: e.target["Unit"].value,
+            unitPrice: e.target["UnitPrice"].value,
+
+        };
+
+        let response = await fetch('/Item/Edit?id=' + id, {
+            method: 'PUT',
+            headers: {
+                'content-type': 'application/json'
+            },
+            body: JSON.stringify(itemData)
+        });
+
+        updateTable();
+
+        $('#ItemModal').modal('hide');
+    }
+
+    async function handleCreateSubmit(e) {
+        e.preventDefault();
+
+        let form = $(e.target);
+        if (!form.valid()) {
+            return;
+        }
+
+        let button = document.getElementById('btnCreate');
+
+        button.setAttribute('disabled', 'disabled');
+        button.innerHTML = `
+              <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+              Loading...
+              `;
+
+        // Extract a JSON object
+
+
+        let itemData = {
+            itemName: e.target["ItemName"].value,
+            unit: e.target["Unit"].value,
+            unitPrice: e.target["UnitPrice"].value,
+
+        };
+
+        // POST the joke to the controller
+        let response = await fetch('/Item/Create', {
+            method: "POST",
+            headers: {
+                'content-type': 'application/json'
+            },
+            body: JSON.stringify(itemData)
+        });
+
+        if (response.ok) {
+            console.log(itemData);
+
+            updateTable();
+
+            $('#ItemModal').modal('hide');
+
+            if (response.status == 201) {
+                let item = await response.json();
+                console.log(item.id);
+                localStorage.setItem('ItemID', item.id);
+            }
+        }
+
+        button.removeAttribute('disabled');
+        button.innerHTML = 'Create';
+
+    }
+
+    async function deleteConfirm(id) {
+
+        // Confirm Dialog
+        if (confirm("Are you sure you want to delete Item with ID: " + id)) {
+            //showSpinner();
+            // Fetch Request
+            await fetch('/Item/Delete?id=' + id, { method: "DELETE" })
+            // Update Table
+            await updateTable();
+            //hideSpinner();
+        }
+    }
+
+</script>
+
+@section Scripts {
+    @{
+        await Html.RenderPartialAsync("_ValidationScriptsPartial");
+    }
+}
